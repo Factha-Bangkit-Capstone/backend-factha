@@ -1,47 +1,49 @@
 const tf = require("@tensorflow/tfjs");
-const InputError = require("../exceptions/InputError");
+const { getModel } = require("./loadModel");
 
-// Function to preprocess the text input
-function preprocessText(text, tokenizer) {
-    // Tokenize the text input
-    let sequences = tokenizer.textsToSequences([text])[0]; // Extract sequences from array
-    console.log('Sequences:', sequences);
-    
-    // Convert sequences to numeric tensor
-    const numericTensor = tf.tensor2d([sequences.map(word => tokenizer.wordIndex[word] || 0)]); // Convert words to indices
-    
-    // Pad the sequences to a fixed length (e.g., 224)
-    const paddedTensor = tf.pad(numericTensor, [[0, 0], [0, 224 - sequences.length]], 0); // Adjust padding
-    
-    // Convert to tensor and expand dimensions
-    const tensor = paddedTensor.expandDims(0).toFloat();
-    return tensor;
-}
+// Preprocess the input text by tokenizing based on space
+const preprocessText = (text, maxLen = 1076) => {
+  const tokens = text.toLowerCase().split(" ");
 
-// Function to make predictions
-async function predictValidity(model, tensor) {
-    try {
-        // Make predictions
-        const prediction = model.predict(tensor);
-        const score = await prediction.data();
-        const confidenceScore = Math.max(...score) * 100;
+  // Convert tokens to indices (for simplicity, using character codes as indices)
+  const tokenIndices = tokens.map((token) => token.charCodeAt(0));
 
-        // Determine result based on confidence score
-        let result, description, boolResult;
-        if (confidenceScore > 50) {
-            result = "Fakta / Valid";
-            description = "Berita VALID / FAKTA!";
-            boolResult = 1;
-        } else {
-            result = "Hoax / Tidak Valid";
-            description = "Berita TIDAK VALID / HOAX!";
-            boolResult = 0;
-        }
-
-        return { result, description, boolResult };
-    } catch (error) {
-        throw new InputError(`Terjadi kesalahan input: ${error.message}`);
+  // Padding or truncating to ensure consistent length
+  if (tokenIndices.length < maxLen) {
+    const paddedTokens = new Array(maxLen).fill(0);
+    for (let i = 0; i < tokenIndices.length; i++) {
+      paddedTokens[i] = tokenIndices[i];
     }
-}
+    return paddedTokens;
+  } else {
+    return tokenIndices.slice(0, maxLen);
+  }
+};
 
-module.exports = {predictValidity, preprocessText};
+// Perform prediction
+const predict = async (text) => {
+  const model = getModel();
+  if (!model) {
+    throw new Error("Model not loaded");
+  }
+
+  const processedInput = preprocessText(text);
+
+  // Create a tensor from the processed input
+  const inputTensor = tf.tensor2d([processedInput]);
+
+  // Perform the prediction
+  const prediction = await model.executeAsync(inputTensor);
+
+//   console.log("Prediction:", prediction); // Log the prediction for debugging
+
+  // Extract the single value from the prediction tensor
+  const faktaScore = prediction.arraySync()[0][0]; // Extract the single value
+
+  const hoaxScore = 1 - faktaScore;
+//   console.log("Hoax Score:", hoaxScore);
+//   console.log("Fakta Score:", faktaScore);
+  return { hoaxScore, faktaScore };
+};
+
+module.exports = { predict };

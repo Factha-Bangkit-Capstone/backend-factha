@@ -1,21 +1,17 @@
-const tf = require('@tensorflow/tfjs');
+const tf = require("@tensorflow/tfjs");
+require("dotenv").config();
 
-// class L2 extends tf.regularizers.L2 {
-//     static className = 'L2';
-// }
-// tf.serialization.registerClass(L2);
+let model;
 
-class L2 {
-
-    static className = 'L2';
-
-    constructor(config) {
-       return tf.regularizers.l1l2(config)
+const loadModel = async () => {
+    try {
+        model = await tf.loadGraphModel(process.env.MODEL_URL);
+        console.log('Model loaded successfully');
+    } catch (err) {
+        console.error('Error loading model:', err);
     }
-}
-tf.serialization.registerClass(L2);
+};
 
-async function loadModel() {
-    return tf.loadLayersModel(process.env.MODEL_URL);
-}
-module.exports = loadModel;
+const getModel = () => model;
+
+module.exports = { loadModel, getModel };
